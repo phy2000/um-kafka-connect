@@ -6,11 +6,11 @@
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
-        <module name="um-kafka-connect" />
+        <module name="ultramessaging" />
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel>
-      <module name="um-kafka-connect" target="11" />
+      <module name="ultramessaging" target="11" />
     </bytecodeTargetLevel>
   </component>
 </project>
