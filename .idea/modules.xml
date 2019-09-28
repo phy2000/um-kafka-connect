@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/um-kafka-connect.iml" filepath="$PROJECT_DIR$/um-kafka-connect.iml" />
+      <module fileurl="file://$PROJECT_DIR$/ultramessaging.iml" filepath="$PROJECT_DIR$/ultramessaging.iml" />
     </modules>
   </component>
 </project>
