@@ -1,4 +1,4 @@
-//package org.phy2000.kafka.connect.ultramessaging;
+package org.phy2000.ultramessaging.examples;
 
 import com.latencybusters.lbm.*;
 import java.util.*;
@@ -720,7 +720,7 @@ public class UmeSrc {
 		    try
 		    {
 			Thread.sleep(1000);
-			umesrc.appsent--;
+			UmeSrc.appsent--;
 		    }
 		    catch (InterruptedException e) { }
 		    continue;
@@ -740,7 +740,7 @@ public class UmeSrc {
 		    try
 		    {
 			Thread.sleep(1000);
-			umqsrc.appsent--;
+			UmeSrc.appsent--;
 		    }
 		    catch (InterruptedException e) { }
 		    continue;
@@ -760,7 +760,7 @@ public class UmeSrc {
 		    try
 		    {
 			Thread.sleep(1000);
-			umqsrc.appsent--;
+			UmeSrc.appsent--;
 		    }
 		    catch (InterruptedException e) { }
 		    continue;
@@ -951,7 +951,7 @@ public class UmeSrc {
 		}
 	    }
 	    else {
-		umesrc.store_behaviour = LBM.SRC_TOPIC_ATTR_UME_STORE_BEHAVIOR_QC;
+		UmeSrc.store_behaviour = LBM.SRC_TOPIC_ATTR_UME_STORE_BEHAVIOR_QC;
 
 		if (groups.length > 0) {
 		    for (int j = 0; j < groups.length; j++) {
@@ -1096,7 +1096,7 @@ class UMESrcCB implements LBMSourceEventCallback, LBMMessageReclamationCallback
 	    case LBM.SRC_EVENT_UME_REGISTRATION_COMPLETE_EX:
 		UMESourceEventRegistrationCompleteInfo regcomp = sourceEvent.registrationCompleteInfo();
 
-		umesrc.sleep_before_sending = 1000;
+		UmeSrc.sleep_before_sending = 1000;
 
 		System.out.print("UME registration complete. SQN " + regcomp.sequenceNumber()
 			+ ". Flags " + regcomp.flags() + " ");
@@ -1114,7 +1114,7 @@ class UMESrcCB implements LBMSourceEventCallback, LBMMessageReclamationCallback
 			    + ")");
 
 		/* Peg the counter for the received stable message */
-		umesrc.stablerecv++;
+            UmeSrc.stablerecv++;
 		break;
 	    case LBM.SRC_EVENT_UME_MESSAGE_NOT_STABLE:
 		UMESourceEventAckInfo nstaInfo = sourceEvent.ackInfo();
@@ -1151,11 +1151,11 @@ class UMESrcCB implements LBMSourceEventCallback, LBMMessageReclamationCallback
 		    System.out.println();
 		}
 
-		if (umesrc.store_behaviour == LBM.SRC_TOPIC_ATTR_UME_STORE_BEHAVIOR_RR ||
+		if (UmeSrc.store_behaviour == LBM.SRC_TOPIC_ATTR_UME_STORE_BEHAVIOR_RR ||
 			((staInfo.flags() & LBM.SRC_EVENT_UME_MESSAGE_STABLE_EX_FLAG_STABLE) == LBM.SRC_EVENT_UME_MESSAGE_STABLE_EX_FLAG_STABLE)) {
 
 		    /* Peg the counter for the received stable message */
-		    umesrc.stablerecv++;
+            UmeSrc.stablerecv++;
 		}
 		break;
 	    case LBM.SRC_EVENT_UME_DELIVERY_CONFIRMATION:

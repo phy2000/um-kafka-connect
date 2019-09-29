@@ -1,3 +1,5 @@
+package org.phy2000.ultramessaging.examples;
+
 import com.latencybusters.lbm.*;
 import java.text.NumberFormat;
 import java.util.*;

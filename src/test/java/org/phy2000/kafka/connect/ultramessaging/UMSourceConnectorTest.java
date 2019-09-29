@@ -31,7 +31,7 @@ import java.util.Map;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
-public class UMSourceConnectorTask extends EasyMockSupport {
+public class UMSourceConnectorTest extends EasyMockSupport {
 
     private static final String SINGLE_TOPIC = "test";
     private static final String MULTIPLE_TOPICS = "test1,test2";

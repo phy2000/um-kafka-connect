@@ -5,6 +5,9 @@
   <groupId>org.phy2000.kafka.connect</groupId>
   <artifactId>ultramessaging</artifactId>
   <version>0.1</version>
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
   <dependencies>
     <dependency>
       <groupId>org.apache.kafka</groupId>
@@ -18,11 +21,21 @@
       <version>1.7.25</version>
       <scope>compile</scope>
     </dependency>
-    <dependency>
-      <groupId>com.latencybusters</groupId>
-        <artifactId>UMS</artifactId>
-        <version>6.12</version>
-    </dependency>
+      <dependency>
+          <groupId>com.latencybusters</groupId>
+          <artifactId>UMS</artifactId>
+          <version>6.12</version>
+      </dependency>
+      <dependency>
+          <groupId>com.latencybusters</groupId>
+          <artifactId>UMSPDM</artifactId>
+          <version>6.12</version>
+      </dependency>
+      <dependency>
+          <groupId>com.latencybusters</groupId>
+          <artifactId>UMSSDM</artifactId>
+          <version>6.12</version>
+      </dependency>
     <dependency>
       <groupId>gnu.getopt</groupId>
       <artifactId>java-getopt</artifactId>
@@ -72,6 +85,7 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.8.1</version>
+
         <configuration>
           <source>11</source>
           <target>11</target>
