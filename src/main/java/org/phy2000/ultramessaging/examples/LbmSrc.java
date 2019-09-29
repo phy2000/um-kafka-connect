@@ -1,7 +1,7 @@
 package org.phy2000.ultramessaging.examples;
 
 import com.latencybusters.lbm.*;
-// NODSM import com.latencybusters.lbm.sdm.*;
+import com.latencybusters.lbm.sdm.*;
 import java.util.*;
 import java.text.NumberFormat;
 import java.math.BigInteger;
@@ -768,10 +768,9 @@ class LbmSrc
         ctx.close();
     }
 
-    // NOSDM private static LBMSDMessage SDMsg;
+    private static LBMSDMessage SDMsg;
     private static void CreateSDMessage()
     {
-        /* NOSDM
         try {
             // Create an SDM message and add several fields to the message
             SDMsg = new LBMSDMessage();
@@ -851,11 +850,9 @@ class LbmSrc
             System.out.flush();
         }
 
-        NOSDM */
     }
     private static byte [] UpdateSDMessage(long seq_num)
     {
-        /* NOSDM
         if(SDMsg == null) {
             // Should not be possible since CreateSDMessage is called before the message loop
             System.out.println("No SDM message available");
@@ -879,9 +876,6 @@ class LbmSrc
             System.out.flush();
             return null;
         }
-
-        NOSDM */
-        return null; // NOSDM
     }
 
     private static void print_bw(double sec, long msgs, long bytes)

@@ -21,11 +21,21 @@
       <version>1.7.25</version>
       <scope>compile</scope>
     </dependency>
-    <dependency>
-      <groupId>com.latencybusters</groupId>
-        <artifactId>UMS</artifactId>
-        <version>6.12</version>
-    </dependency>
+      <dependency>
+          <groupId>com.latencybusters</groupId>
+          <artifactId>UMS</artifactId>
+          <version>6.12</version>
+      </dependency>
+      <dependency>
+          <groupId>com.latencybusters</groupId>
+          <artifactId>UMSPDM</artifactId>
+          <version>6.12</version>
+      </dependency>
+      <dependency>
+          <groupId>com.latencybusters</groupId>
+          <artifactId>UMSSDM</artifactId>
+          <version>6.12</version>
+      </dependency>
     <dependency>
       <groupId>gnu.getopt</groupId>
       <artifactId>java-getopt</artifactId>

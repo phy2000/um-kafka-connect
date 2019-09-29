@@ -19,6 +19,8 @@
     <orderEntry type="library" name="Maven: javax.ws.rs:javax.ws.rs-api:2.1.1" level="project" />
     <orderEntry type="library" name="Maven: org.slf4j:slf4j-api:1.7.25" level="project" />
     <orderEntry type="library" name="Maven: com.latencybusters:UMS:6.12" level="project" />
+    <orderEntry type="library" name="Maven: com.latencybusters:UMSPDM:6.12" level="project" />
+    <orderEntry type="library" name="Maven: com.latencybusters:UMSSDM:6.12" level="project" />
     <orderEntry type="library" name="Maven: gnu.getopt:java-getopt:1.0.13" level="project" />
     <orderEntry type="library" name="Maven: log4j:log4j:1.2.17" level="project" />
     <orderEntry type="library" scope="TEST" name="Maven: org.easymock:easymock:4.0.2" level="project" />

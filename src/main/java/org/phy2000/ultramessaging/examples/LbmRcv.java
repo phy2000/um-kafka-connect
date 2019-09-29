@@ -1,7 +1,7 @@
 package org.phy2000.ultramessaging.examples;
 
 import com.latencybusters.lbm.*;
-// NOSDM import com.latencybusters.lbm.sdm.*;
+import com.latencybusters.lbm.sdm.*;
 import java.util.*;
 import java.text.NumberFormat;
 import verifiablemsg.*;
@@ -768,7 +768,7 @@ class LBMRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
     public int stotal_msg_count = 0;
     public long total_byte_count = 0;
 
-    // NOSDM LBMSDMessage SDMsg;
+    LBMSDMessage SDMsg;
 
     boolean _verbose = false;
     boolean _end_on_eos = false;
@@ -778,7 +778,7 @@ class LBMRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
         _verbose = verbose;
         _end_on_eos = end_on_eos;
         _summary = summary;
-        // NODSM SDMsg = new LBMSDMessage();
+        SDMsg = new LBMSDMessage();
     }
 
     // This immediate-mode receiver is *only* used for topicless
@@ -868,7 +868,6 @@ class LBMRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
                     }
                     else if(LbmRcv.sdm)
                     {
-                        /* NOSDM
                         try
                         {
                             SDMsg.parse(msg.data());
@@ -881,7 +880,7 @@ class LBMRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
                         catch (LBMSDMException sdme)
                         {
                             System.out.println("Error occurred processing received SDM Message: " + sdme);
-                        } NOSDM */
+                        }
                     }
                 }
 
