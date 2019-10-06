@@ -82,11 +82,11 @@ public class UMSinkConnectorTest extends EasyMockSupport {
     public void testSinkTasksStdout() {
         replayAll();
 
-        sinkProperties.remove(UMSourceConnector.FILE_CONFIG);
+        sinkProperties.remove(UMSinkConnector.FILE_CONFIG);
         connector.start(sinkProperties);
         List<Map<String, String>> taskConfigs = connector.taskConfigs(1);
         assertEquals(1, taskConfigs.size());
-        assertNull(taskConfigs.get(0).get(UMSourceConnector.FILE_CONFIG));
+        assertNull(taskConfigs.get(0).get(UMSinkConnector.FILE_CONFIG));
 
         verifyAll();
     }
