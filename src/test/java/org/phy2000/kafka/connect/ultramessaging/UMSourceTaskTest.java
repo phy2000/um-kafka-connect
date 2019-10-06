@@ -53,8 +53,8 @@ public class UMSourceTaskTest extends EasyMockSupport {
     public void setup() throws IOException {
         tempFile = File.createTempFile("file-stream-source-task-test", null);
         config = new HashMap<>();
-        config.put(UMSourceConnector.FILE_CONFIG, tempFile.getAbsolutePath());
-        config.put(UMSourceConnector.TOPIC_CONFIG, TOPIC);
+        config.put(UMSourceConnector.UM_CONFIG_FILE, tempFile.getAbsolutePath());
+        config.put(UMSourceConnector.KAFKA_TOPIC, TOPIC);
         config.put(UMSourceConnector.TASK_BATCH_SIZE_CONFIG, String.valueOf(UMSourceConnector.DEFAULT_TASK_BATCH_SIZE));
         task = new UMSourceTask();
         offsetStorageReader = createMock(OffsetStorageReader.class);
@@ -159,7 +159,7 @@ public class UMSourceTaskTest extends EasyMockSupport {
         String data = "line\n";
         System.setIn(new ByteArrayInputStream(data.getBytes()));
 
-        config.remove(UMSourceConnector.FILE_CONFIG);
+        config.remove(UMSourceConnector.UM_CONFIG_FILE);
         task.start(config);
 
         List<SourceRecord> records = task.poll();
@@ -171,7 +171,7 @@ public class UMSourceTaskTest extends EasyMockSupport {
     }
 
     public void testInvalidFile() throws InterruptedException {
-        config.put(UMSourceConnector.FILE_CONFIG, "bogusfilename");
+        config.put(UMSourceConnector.UM_CONFIG_FILE, "bogusfilename");
         task.start(config);
         // Currently the task retries indefinitely if the file isn't found, but shouldn't return any data.
         for (int i = 0; i < 100; i++)

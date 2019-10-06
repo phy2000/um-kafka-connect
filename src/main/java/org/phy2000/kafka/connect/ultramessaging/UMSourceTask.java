@@ -19,16 +19,18 @@ package org.phy2000.kafka.connect.ultramessaging;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
-import java.nio.file.Paths;
+
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.BlockingDeque;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.TimeUnit;
 
+import com.latencybusters.lbm.*;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -36,25 +38,33 @@ import org.apache.kafka.connect.source.SourceTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.kafka.connect.data.Schema.BYTES_SCHEMA;
+
 /**
  * UMSourceTask reads from stdin or a file.
  */
 public class UMSourceTask extends SourceTask {
-    private static final Logger log = LoggerFactory.getLogger(UMSourceTask.class);
+    private static final Logger logger = LoggerFactory.getLogger(UMSourceTask.class);
     public static final String FILENAME_FIELD = "filename";
-    public  static final String POSITION_FIELD = "position";
+    public static final String POSITION_FIELD = "position";
     private static final Schema VALUE_SCHEMA = Schema.STRING_SCHEMA;
 
-    private String filename;
+    private String um_config_filename;
     private InputStream stream;
     private BufferedReader reader = null;
     private char[] buffer = new char[1024];
     private int offset = 0;
-    private String topic = null;
+    private String um_topic = null;
+    private String kafka_topic = null;
     private int batchSize = UMSourceConnector.DEFAULT_TASK_BATCH_SIZE;
 
     private Long streamOffset;
 
+    private LBM lbm;
+
+    BlockingQueue<LBMMessage> msgQ = new LinkedBlockingDeque<>(1000);
+
+    LBMObjectRecycler objRec = new LBMObjectRecycler();
     @Override
     public String version() {
         return new UMSourceConnector().version();
@@ -62,159 +72,121 @@ public class UMSourceTask extends SourceTask {
 
     @Override
     public void start(Map<String, String> props) {
-        filename = props.get(UMSourceConnector.FILE_CONFIG);
-        if (filename == null || filename.isEmpty()) {
-            stream = System.in;
-            // Tracking offset for stdin doesn't make sense
-            streamOffset = null;
-            reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
-        }
-        // Missing topic or parsing error is not possible because we've parsed the config in the
-        // Connector
-        topic = props.get(UMSourceConnector.TOPIC_CONFIG);
+        // - Initialize batch size
         batchSize = Integer.parseInt(props.get(UMSourceConnector.TASK_BATCH_SIZE_CONFIG));
+        // - Get UM Config file
+        um_config_filename = props.get(UMSourceConnector.UM_CONFIG_FILE);
+        // - Get Topic Names
+        // TODO - handle multiple topics and/or partitioning
+        um_topic = props.get(UMSourceConnector.UM_TOPIC);
+        kafka_topic = props.get(UMSourceConnector.KAFKA_TOPIC);
+
+        try {
+            // - Set UM License file or License string
+            if (props.get(UMSourceConnector.UM_LICENSE_STRING) != null) {
+                LBM.setLicenseString(props.get(UMSourceConnector.UM_LICENSE_STRING));
+            } else {
+                LBM.setLicenseFile(props.get(UMSourceConnector.UM_LICENSE_FILE));
+            }
+            // Init LBM
+            lbm = new LBM();
+        } catch (LBMException ex) {
+            String errStr = "Error initializing LBM: " + ex.toString();
+            logger.error(errStr, ex);
+            throw new ConnectException(errStr, ex);
+        }
+
+        org.apache.log4j.BasicConfigurator.configure();
+        log4jLogger lbmlogger = new log4jLogger(org.apache.log4j.Logger.getLogger(this.getClass()));
+        lbm.setLogger(lbmlogger);
+
+        try {
+            LBM.setConfiguration(um_config_filename);
+        } catch (LBMException ex) {
+            String errStr = String.format("Error LBM.setConfiguration(%s)", um_config_filename);
+            logger.error(errStr, ex);
+            throw new ConnectException(errStr, ex);
+        }
+        LBMContextAttributes ctx_attr = null;
+        try {
+            ctx_attr = new LBMContextAttributes();
+            ctx_attr.setObjectRecycler(objRec, null);
+        } catch (LBMException ex) {
+            String errStr = "Error creating context attributes: " + ex.toString();
+            logger.error(errStr, ex);
+            throw new ConnectException(errStr, ex);
+        }
+        // Create Callback object
+        UmRcvReceiver rcv = new UmRcvReceiver(um_topic, kafka_topic, msgQ);
+        ctx_attr.setImmediateMessageCallback(rcv);
+
+        // Create Context object
+        LBMContext ctx = null;
+        try {
+            ctx = new LBMContext(ctx_attr);
+        } catch (LBMException ex) {
+            String errStr = ("Error creating context: " + ex.toString());
+            logger.error(errStr, ex);
+            throw new ConnectException(errStr, ex);
+        }
+
+        // - Create Topic object
+        LBMTopic topic = null;
+        try {
+            LBMReceiverAttributes rcv_attr = new LBMReceiverAttributes();
+            rcv_attr.setObjectRecycler(objRec, null);
+            topic = new LBMTopic(ctx, um_topic, rcv_attr);
+        }
+        catch (LBMException ex)
+        {
+            String errStr = String.format("Error creating LBMTopic(%s): %s", um_topic, ex.toString());
+            logger.error(errStr, ex);
+            throw new ConnectException(errStr, ex);
+        }
+
+        LBMReceiver lbmrcv = null;
+        // - Create Receiver object
+        try {
+            lbmrcv = new LBMReceiver(ctx, topic, rcv, null);
+        } catch (LBMException ex) {
+            String errStr = String.format("Error creating LBMReceiver(%s): %s", um_topic, ex.toString());
+            logger.error(errStr, ex);
+            throw new ConnectException(errStr, ex);
+        }
+
+
     }
 
     @Override
     public List<SourceRecord> poll() throws InterruptedException {
-        if (stream == null) {
-            try {
-                stream = Files.newInputStream(Paths.get(filename));
-                Map<String, Object> offset = context.offsetStorageReader().offset(Collections.singletonMap(FILENAME_FIELD, filename));
-                if (offset != null) {
-                    Object lastRecordedOffset = offset.get(POSITION_FIELD);
-                    if (lastRecordedOffset != null && !(lastRecordedOffset instanceof Long))
-                        throw new ConnectException("Offset position is the incorrect type");
-                    if (lastRecordedOffset != null) {
-                        log.debug("Found previous offset, trying to skip to file offset {}", lastRecordedOffset);
-                        long skipLeft = (Long) lastRecordedOffset;
-                        while (skipLeft > 0) {
-                            try {
-                                long skipped = stream.skip(skipLeft);
-                                skipLeft -= skipped;
-                            } catch (IOException e) {
-                                log.error("Error while trying to seek to previous offset in file {}: ", filename, e);
-                                throw new ConnectException(e);
-                            }
-                        }
-                        log.debug("Skipped to offset {}", lastRecordedOffset);
-                    }
-                    streamOffset = (lastRecordedOffset != null) ? (Long) lastRecordedOffset : 0L;
-                } else {
-                    streamOffset = 0L;
-                }
-                reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
-                log.debug("Opened {} for reading", logFilename());
-            } catch (NoSuchFileException e) {
-                log.warn("Couldn't find file {} for UMSourceTask, sleeping to wait for it to be created", logFilename());
-                synchronized (this) {
-                    this.wait(1000);
-                }
-                return null;
-            } catch (IOException e) {
-                log.error("Error while trying to open file {}: ", filename, e);
-                throw new ConnectException(e);
+
+        ArrayList<SourceRecord> records = null;
+        LBMMessage msg = null;
+
+        records = new ArrayList<>();
+        while ((msg = msgQ.poll()) != null) {
+            SourceRecord record = new SourceRecord(offsetKey(msg.topicName()), offsetValue(msg.sequenceNumber()),
+                    kafka_topic, null, BYTES_SCHEMA, msg.data());
+            records.add(record);
+            if (records.size() >= batchSize) {
+                return records;
             }
         }
-
-        // Unfortunately we can't just use readLine() because it blocks in an uninterruptible way.
-        // Instead we have to manage splitting lines ourselves, using simple backoff when no new data
-        // is available.
-        try {
-            final BufferedReader readerCopy;
-            synchronized (this) {
-                readerCopy = reader;
-            }
-            if (readerCopy == null)
-                return null;
-
-            ArrayList<SourceRecord> records = null;
-
-            int nread = 0;
-            while (readerCopy.ready()) {
-                nread = readerCopy.read(buffer, offset, buffer.length - offset);
-                log.trace("Read {} bytes from {}", nread, logFilename());
-
-                if (nread > 0) {
-                    offset += nread;
-                    if (offset == buffer.length) {
-                        char[] newbuf = new char[buffer.length * 2];
-                        System.arraycopy(buffer, 0, newbuf, 0, buffer.length);
-                        buffer = newbuf;
-                    }
-
-                    String line;
-                    do {
-                        line = extractLine();
-                        if (line != null) {
-                            log.trace("Read a line from {}", logFilename());
-                            if (records == null)
-                                records = new ArrayList<>();
-                            records.add(new SourceRecord(offsetKey(filename), offsetValue(streamOffset), topic, null,
-                                    null, null, VALUE_SCHEMA, line, System.currentTimeMillis()));
-
-                            if (records.size() >= batchSize) {
-                                return records;
-                            }
-                        }
-                    } while (line != null);
-                }
-            }
-
-            if (nread <= 0)
-                synchronized (this) {
-                    this.wait(1000);
-                }
-
-            return records;
-        } catch (IOException e) {
-            // Underlying stream was killed, probably as a result of calling stop. Allow to return
-            // null, and driving thread will handle any shutdown if necessary.
-        }
-        return null;
+        return records;
     }
 
-    private String extractLine() {
-        int until = -1, newStart = -1;
-        for (int i = 0; i < offset; i++) {
-            if (buffer[i] == '\n') {
-                until = i;
-                newStart = i + 1;
-                break;
-            } else if (buffer[i] == '\r') {
-                // We need to check for \r\n, so we must skip this if we can't check the next char
-                if (i + 1 >= offset)
-                    return null;
-
-                until = i;
-                newStart = (buffer[i + 1] == '\n') ? i + 2 : i + 1;
-                break;
-            }
-        }
-
-        if (until != -1) {
-            String result = new String(buffer, 0, until);
-            System.arraycopy(buffer, newStart, buffer, 0, buffer.length - newStart);
-            offset = offset - newStart;
-            if (streamOffset != null)
-                streamOffset += newStart;
-            return result;
-        } else {
-            return null;
-        }
-    }
 
     @Override
     public void stop() {
-        log.trace("Stopping");
+        logger.trace("Stopping");
         synchronized (this) {
             try {
                 if (stream != null && stream != System.in) {
                     stream.close();
-                    log.trace("Closed input stream");
+                    logger.trace("Closed input stream");
                 }
             } catch (IOException e) {
-                log.error("Failed to close UMSourceTask stream: ", e);
+                logger.error("Failed to close UMSourceTask stream: ", e);
             }
             this.notify();
         }
@@ -229,6 +201,140 @@ public class UMSourceTask extends SourceTask {
     }
 
     private String logFilename() {
-        return filename == null ? "stdin" : filename;
+        return um_config_filename == null ? "stdin" : um_config_filename;
+    }
+}
+
+class UmRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
+{
+    public long imsg_count = 0;
+    public long msg_count = 0;
+    public long total_msg_count = 0;
+    public long subtotal_msg_count = 0;
+    public long byte_count = 0;
+    public long unrec_count = 0;
+    public long total_unrec_count = 0;
+    public long burst_loss = 0;
+    public long rx_msgs = 0;
+    public long otr_msgs = 0;
+
+    public long data_start_time = 0;
+    public long data_end_time = 0;
+
+    public int stotal_msg_count = 0;
+    public long total_byte_count = 0;
+    String umTopic = "";
+    String kafkaTopic = "";
+
+    BlockingQueue<LBMMessage> msgQ;
+
+    UmRcvReceiver(String um_topic, String kafka_topic, BlockingQueue<LBMMessage> msg_queue) {
+        umTopic = um_topic;
+        kafkaTopic = kafka_topic;
+        msgQ = msg_queue;
+    }
+    private static final Logger logger = LoggerFactory.getLogger(UmRcvReceiver.class);
+
+    // This immediate-mode receiver is *only* used for topicless
+    // immediate-mode sends.  Immediate sends that use a topic
+    // are received with normal receiver objects.
+    public int onReceiveImmediate(Object cbArg, LBMMessage msg)
+    {
+        imsg_count++;
+        return onReceive(cbArg, msg);
+    }
+
+    void handleMsgData(Object cbArg, LBMMessage msg) {
+        if (stotal_msg_count == 0)
+            data_start_time = System.currentTimeMillis();
+        else
+            data_end_time = System.currentTimeMillis();
+        msg_count++;
+        total_msg_count++;
+        stotal_msg_count++;
+        subtotal_msg_count++;
+        /* When using Zero Object Delivery, be sure to use the
+         * LBMMessage.dataLength() method to obtain message length,
+         * rather than using LBMMessage.data().length.  Calling
+         * LBMMessage.data() will cause the creation of a new
+         * byte[] array object, which is unnecessary if all you need
+         * is the message length. */
+        byte_count += msg.dataLength();
+        total_byte_count += msg.dataLength();
+
+        if ((msg.flags() & LBM.MSG_FLAG_RETRANSMIT) != 0) {
+            rx_msgs++;
+        }
+        if ((msg.flags() & LBM.MSG_FLAG_OTR) != 0) {
+            otr_msgs++;
+        }
+        // TODO - write UM message to java queue
+        // Will be picked up by "poll" thread
+        while (true) {
+            if (!msgQ.offer(msg)) {
+                logger.warn(String.format("Queue is full for seqnum %d - waiting 1 second for retry",
+                        msg.sequenceNumber()));
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException intEx) {
+                    logger.warn(String.format("Retry interrupted for seqnum %d", msg.sequenceNumber()), intEx);
+                    return;
+                }
+            }
+        }
+    }
+    public int onReceive(Object cbArg, LBMMessage msg)
+    {
+        boolean doDispose = true;
+        switch (msg.type())
+        {
+            case LBM.MSG_DATA:
+                handleMsgData(cbArg, msg);
+                doDispose = false;
+                break;
+            case LBM.MSG_BOS:
+                logger.info("[" + msg.topicName() + "][" + msg.source() + "], Beginning of Transport Session");
+                break;
+            case LBM.MSG_EOS:
+                logger.info("[" + msg.topicName() + "][" + msg.source() + "], End of Transport Session");
+                subtotal_msg_count = 0;
+                break;
+            case LBM.MSG_UNRECOVERABLE_LOSS:
+                unrec_count++;
+                total_unrec_count++;
+                break;
+            case LBM.MSG_UNRECOVERABLE_LOSS_BURST:
+                burst_loss++;
+                break;
+            case LBM.MSG_REQUEST:
+                if (stotal_msg_count == 0)
+                    data_start_time = System.currentTimeMillis();
+                else
+                    data_end_time = System.currentTimeMillis();
+                msg_count++;
+                stotal_msg_count++;
+                subtotal_msg_count++;
+                byte_count += msg.dataLength();
+                total_byte_count += msg.dataLength();
+                break;
+            case LBM.MSG_HF_RESET:
+                long sqn = msg.sequenceNumber();
+                if ((msg.flags() & (LBM.MSG_FLAG_HF_32 | LBM.MSG_FLAG_HF_64)) != 0) {
+                    sqn = msg.hfSequenceNumber();
+                }
+                logger.info(String.format("[%s][%s][%s]%s%s%s%s-RESET\n", msg.topicName(), msg.source(), sqn >= 0 ? sqn : msg.hfSequenceNumberBigInt(),
+                        ((msg.flags() & LBM.MSG_FLAG_RETRANSMIT) != 0 ? "-RX" : ""),
+                        ((msg.flags() & LBM.MSG_FLAG_OTR) != 0 ? "-OTR" : ""),
+                        ((msg.flags() & LBM.MSG_FLAG_HF_64) != 0 ? "-HF64" : ""),
+                        ((msg.flags() & LBM.MSG_FLAG_HF_32) != 0 ? "-HF32" : "")));
+                break;
+            default:
+                logger.warn("Unknown lbm_msg_t type " + msg.type() + " [" + msg.topicName() + "][" + msg.source() + "]");
+                break;
+        }
+        if (doDispose) {
+            msg.dispose();
+        }
+        return 0;
     }
 }

@@ -35,21 +35,35 @@ import java.util.Map;
  * sink modes via its 'mode' setting.
  */
 public class UMSourceConnector extends SourceConnector {
-    public static final String TOPIC_CONFIG = "topic";
-    public static final String FILE_CONFIG = "file";
+    public static final String KAFKA_TOPIC = "kafka.topic";
+    public static final String UM_CONFIG_FILE = "um.um_config.file";
+    public static final String UM_LICENSE_FILE = "um.license.file";
+    public static final String UM_LICENSE_STRING = "um.license.string";
+    public static final String UM_TOPIC = "um.topic";
     public static final String TASK_BATCH_SIZE_CONFIG = "batch.size";
 
     public static final int DEFAULT_TASK_BATCH_SIZE = 2000;
 
     private static final ConfigDef CONFIG_DEF = new ConfigDef()
-        .define(FILE_CONFIG, Type.STRING, null, Importance.HIGH, "Source filename. If not specified, the standard input will be used")
-        .define(TOPIC_CONFIG, Type.LIST, Importance.HIGH, "The topic to publish data to")
-        .define(TASK_BATCH_SIZE_CONFIG, Type.INT, DEFAULT_TASK_BATCH_SIZE, Importance.LOW,
-                "The maximum number of records the Source task can read from file one time");
+            .define(UM_CONFIG_FILE, Type.STRING, Importance.HIGH, "Full path to the UM configuration file")
+            .define(UM_LICENSE_FILE, Type.STRING, Importance.HIGH, "Full path to the UM License file")
+            .define(UM_LICENSE_STRING, Type.STRING, Importance.HIGH, "License string - if set, used instead of license file")
+            .define(UM_TOPIC, Type.STRING, Importance.HIGH, "UM Topic name to subscribe to")
+            .define(KAFKA_TOPIC, Type.LIST, Importance.HIGH, "The kafka topic to publish data to")
+            .define(TASK_BATCH_SIZE_CONFIG, Type.INT, DEFAULT_TASK_BATCH_SIZE, Importance.LOW,
+                    "The maximum number of records the Source task can read from UM topic");
 
-    private String filename;
-    private String topic;
-    private int batchSize;
+    private um_kafka_config um_config = new um_kafka_config();
+
+    class um_kafka_config {
+        String kafka_topic;
+        int task_batch_size;
+
+        String um_config_file;
+        String um_license_file;
+        String um_license_string;
+        String um_topic;
+    }
 
     @Override
     public String version() {
@@ -59,13 +73,34 @@ public class UMSourceConnector extends SourceConnector {
     @Override
     public void start(Map<String, String> props) {
         AbstractConfig parsedConfig = new AbstractConfig(CONFIG_DEF, props);
-        filename = parsedConfig.getString(FILE_CONFIG);
-        List<String> topics = parsedConfig.getList(TOPIC_CONFIG);
+
+        List<String> topics = parsedConfig.getList(KAFKA_TOPIC);
+        String errMsg = "";
+        // TODO - need logic to map multiple topics->topics
         if (topics.size() != 1) {
-            throw new ConfigException("'topic' in UMSourceConnector configuration requires definition of a single topic");
+            errMsg += String.format("'%s' must be a single Kafka topic\n", KAFKA_TOPIC);
         }
-        topic = topics.get(0);
-        batchSize = parsedConfig.getInt(TASK_BATCH_SIZE_CONFIG);
+        um_config.kafka_topic = topics.get(0);
+        um_config.task_batch_size = parsedConfig.getInt(TASK_BATCH_SIZE_CONFIG);
+
+        um_config.um_config_file = parsedConfig.getString(UM_CONFIG_FILE);
+        if (um_config.um_config_file == null) {
+            errMsg += String.format("%s must be set\n", UM_CONFIG_FILE);
+        }
+        um_config.um_license_file = parsedConfig.getString(UM_LICENSE_FILE);
+        um_config.um_license_string = parsedConfig.getString(UM_LICENSE_STRING);
+        if (um_config.um_license_file == null && um_config.um_license_string == null) {
+            errMsg += String.format("one of %s or %s must be set\n", UM_LICENSE_FILE, UM_LICENSE_STRING);
+        }
+        topics = parsedConfig.getList(UM_TOPIC);
+        // TODO - need logic to map multiple topics->topics
+        if (topics.size() != 1) {
+            errMsg += String.format("%s must be a single UM topic\n", UM_TOPIC);
+        }
+        if (errMsg.length() >= 1) {
+            throw new ConfigException(errMsg);
+        }
+        um_config.um_topic = topics.get(0);
     }
 
     @Override
@@ -78,10 +113,15 @@ public class UMSourceConnector extends SourceConnector {
         ArrayList<Map<String, String>> configs = new ArrayList<>();
         // Only one input stream makes sense.
         Map<String, String> config = new HashMap<>();
-        if (filename != null)
-            config.put(FILE_CONFIG, filename);
-        config.put(TOPIC_CONFIG, topic);
-        config.put(TASK_BATCH_SIZE_CONFIG, String.valueOf(batchSize));
+
+        config.put(KAFKA_TOPIC, um_config.kafka_topic);
+        config.put(TASK_BATCH_SIZE_CONFIG, String.valueOf(um_config.task_batch_size));
+
+        config.put(UM_CONFIG_FILE, um_config.um_config_file);
+        config.put(UM_LICENSE_FILE, um_config.um_license_file);
+        config.put(UM_LICENSE_STRING, um_config.um_license_string);
+        config.put(UM_TOPIC, um_config.um_topic);
+
         configs.add(config);
         return configs;
     }
