@@ -153,8 +153,6 @@ public class UMSourceTask extends SourceTask {
             logger.error(errStr, ex);
             throw new ConnectException(errStr, ex);
         }
-
-
     }
 
     @Override
@@ -244,7 +242,7 @@ class UmRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
         return onReceive(cbArg, msg);
     }
 
-    void handleMsgData(Object cbArg, LBMMessage msg) {
+    Boolean handleMsgData(Object cbArg, LBMMessage msg) {
         if (stotal_msg_count == 0)
             data_start_time = System.currentTimeMillis();
         else
@@ -268,7 +266,6 @@ class UmRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
         if ((msg.flags() & LBM.MSG_FLAG_OTR) != 0) {
             otr_msgs++;
         }
-        // TODO - write UM message to java queue
         // Will be picked up by "poll" thread
         while (true) {
             if (!msgQ.offer(msg)) {
@@ -278,8 +275,10 @@ class UmRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
                     Thread.sleep(1000);
                 } catch (InterruptedException intEx) {
                     logger.warn(String.format("Retry interrupted for seqnum %d", msg.sequenceNumber()), intEx);
-                    return;
+                    return false;
                 }
+            } else {
+                return true;
             }
         }
     }
@@ -289,8 +288,12 @@ class UmRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
         switch (msg.type())
         {
             case LBM.MSG_DATA:
-                handleMsgData(cbArg, msg);
-                doDispose = false;
+                if (handleMsgData(cbArg, msg)) {
+                	doDispose = false;
+                } else {
+                	//TODO - what should we do about failed queuing?
+                }
+
                 break;
             case LBM.MSG_BOS:
                 logger.info("[" + msg.topicName() + "][" + msg.source() + "], Beginning of Transport Session");
@@ -302,20 +305,16 @@ class UmRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
             case LBM.MSG_UNRECOVERABLE_LOSS:
                 unrec_count++;
                 total_unrec_count++;
+                logger.warn("[" + msg.topicName() + "][" + msg.source() + "], Unrecoverable Loss!");
                 break;
             case LBM.MSG_UNRECOVERABLE_LOSS_BURST:
                 burst_loss++;
+                logger.info("[" + msg.topicName() + "][" + msg.source() + "], Unrecoverable Burst Loss!");
                 break;
             case LBM.MSG_REQUEST:
-                if (stotal_msg_count == 0)
-                    data_start_time = System.currentTimeMillis();
-                else
-                    data_end_time = System.currentTimeMillis();
-                msg_count++;
-                stotal_msg_count++;
-                subtotal_msg_count++;
-                byte_count += msg.dataLength();
-                total_byte_count += msg.dataLength();
+            	if (handleMsgData(cbArg, msg)) {
+                	doDispose = false;
+                }
                 break;
             case LBM.MSG_HF_RESET:
                 long sqn = msg.sequenceNumber();
