@@ -52,6 +52,7 @@ public class UMSinkConnector extends SinkConnector {
         filename = parsedConfig.getString(FILE_CONFIG);
     }
 
+
     @Override
     public Class<? extends Task> taskClass() {
         return UMSinkTask.class;

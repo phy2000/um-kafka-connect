@@ -48,8 +48,8 @@ public class UMSourceConnectorTest extends EasyMockSupport {
         connector.initialize(ctx);
 
         sourceProperties = new HashMap<>();
-        sourceProperties.put(UMSourceConnector.TOPIC_CONFIG, SINGLE_TOPIC);
-        sourceProperties.put(UMSourceConnector.FILE_CONFIG, FILENAME);
+        sourceProperties.put(UMSourceConnector.KAFKA_TOPIC, SINGLE_TOPIC);
+        sourceProperties.put(UMSourceConnector.UM_CONFIG_FILE, FILENAME);
     }
 
     @Test
@@ -70,17 +70,17 @@ public class UMSourceConnectorTest extends EasyMockSupport {
         List<Map<String, String>> taskConfigs = connector.taskConfigs(1);
         assertEquals(1, taskConfigs.size());
         assertEquals(FILENAME,
-                taskConfigs.get(0).get(UMSourceConnector.FILE_CONFIG));
+                taskConfigs.get(0).get(UMSourceConnector.UM_CONFIG_FILE));
         assertEquals(SINGLE_TOPIC,
-                taskConfigs.get(0).get(UMSourceConnector.TOPIC_CONFIG));
+                taskConfigs.get(0).get(UMSourceConnector.KAFKA_TOPIC));
 
         // Should be able to return fewer than requested #
         taskConfigs = connector.taskConfigs(2);
         assertEquals(1, taskConfigs.size());
         assertEquals(FILENAME,
-                taskConfigs.get(0).get(UMSourceConnector.FILE_CONFIG));
+                taskConfigs.get(0).get(UMSourceConnector.UM_CONFIG_FILE));
         assertEquals(SINGLE_TOPIC,
-                taskConfigs.get(0).get(UMSourceConnector.TOPIC_CONFIG));
+                taskConfigs.get(0).get(UMSourceConnector.KAFKA_TOPIC));
 
         verifyAll();
     }
@@ -89,18 +89,18 @@ public class UMSourceConnectorTest extends EasyMockSupport {
     public void testSourceTasksStdin() {
         EasyMock.replay(ctx);
 
-        sourceProperties.remove(UMSourceConnector.FILE_CONFIG);
+        sourceProperties.remove(UMSourceConnector.UM_CONFIG_FILE);
         connector.start(sourceProperties);
         List<Map<String, String>> taskConfigs = connector.taskConfigs(1);
         assertEquals(1, taskConfigs.size());
-        assertNull(taskConfigs.get(0).get(UMSourceConnector.FILE_CONFIG));
+        assertNull(taskConfigs.get(0).get(UMSourceConnector.UM_CONFIG_FILE));
 
         EasyMock.verify(ctx);
     }
 
     @Test(expected = ConfigException.class)
     public void testMultipleSourcesInvalid() {
-        sourceProperties.put(UMSourceConnector.TOPIC_CONFIG, MULTIPLE_TOPICS);
+        sourceProperties.put(UMSourceConnector.KAFKA_TOPIC, MULTIPLE_TOPICS);
         connector.start(sourceProperties);
     }
 
@@ -116,14 +116,14 @@ public class UMSourceConnectorTest extends EasyMockSupport {
 
     @Test(expected = ConfigException.class)
     public void testMissingTopic() {
-        sourceProperties.remove(UMSourceConnector.TOPIC_CONFIG);
+        sourceProperties.remove(UMSourceConnector.KAFKA_TOPIC);
         connector.start(sourceProperties);
     }
 
     @Test(expected = ConfigException.class)
     public void testBlankTopic() {
         // Because of trimming this tests is same as testing for empty string.
-        sourceProperties.put(UMSourceConnector.TOPIC_CONFIG, "     ");
+        sourceProperties.put(UMSourceConnector.KAFKA_TOPIC, "     ");
         connector.start(sourceProperties);
     }
 
