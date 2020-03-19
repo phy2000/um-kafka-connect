@@ -58,6 +58,8 @@ public class UMSinkConnector extends SinkConnector {
         return UMSinkTask.class;
     }
 
+    // creates a configuration for each task
+    // each task is a separate thread assigned to one or more partitions
     @Override
     public List<Map<String, String>> taskConfigs(int maxTasks) {
         ArrayList<Map<String, String>> configs = new ArrayList<>();
