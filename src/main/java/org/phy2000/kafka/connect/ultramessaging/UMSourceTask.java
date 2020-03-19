@@ -20,6 +20,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 
+import java.io.InterruptedIOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -45,26 +46,25 @@ import static org.apache.kafka.connect.data.Schema.BYTES_SCHEMA;
  */
 public class UMSourceTask extends SourceTask {
     private static final Logger logger = LoggerFactory.getLogger(UMSourceTask.class);
-    public static final String FILENAME_FIELD = "filename";
-    public static final String POSITION_FIELD = "position";
-    private static final Schema VALUE_SCHEMA = Schema.STRING_SCHEMA;
-
-    private String um_config_filename;
     private InputStream stream;
     private BufferedReader reader = null;
     private char[] buffer = new char[1024];
     private int offset = 0;
+
+    private static final Schema VALUE_SCHEMA = Schema.STRING_SCHEMA;
+    public static final String FILENAME_FIELD = "filename";
+    public static final String POSITION_FIELD = "position";
+
+    private String um_config_filename;
     private String um_topic = null;
     private String kafka_topic = null;
     private int batchSize = UMSourceConnector.DEFAULT_TASK_BATCH_SIZE;
-
     private Long streamOffset;
-
     private LBM lbm;
 
     BlockingQueue<LBMMessage> msgQ = new LinkedBlockingDeque<>(1000);
-
     LBMObjectRecycler objRec = new LBMObjectRecycler();
+
     @Override
     public String version() {
         return new UMSourceConnector().version();
@@ -72,20 +72,27 @@ public class UMSourceTask extends SourceTask {
 
     @Override
     public void start(Map<String, String> props) {
-        // - Initialize batch size
         batchSize = Integer.parseInt(props.get(UMSourceConnector.TASK_BATCH_SIZE_CONFIG));
+        System.out.println("UMsourceTask::start() batchSize: " + batchSize);
         // - Get UM Config file
         um_config_filename = props.get(UMSourceConnector.UM_CONFIG_FILE);
+        System.out.println("UMsourceTask::start() um_config_filename: " + um_config_filename);
         // - Get Topic Names
         // TODO - handle multiple topics and/or partitioning
         um_topic = props.get(UMSourceConnector.UM_TOPIC);
+        System.out.println("UMsourceTask::start() um_topic: " +  um_topic);
         kafka_topic = props.get(UMSourceConnector.KAFKA_TOPIC);
+        System.out.println("UMsourceTask::start() kafka_topic: " +  kafka_topic);
 
         try {
             // - Set UM License file or License string
+            System.out.println("UMsourceTask::start() UM_LICENSE_STRING: " + (props.get(UMSourceConnector.UM_LICENSE_STRING)));
+            System.out.println("UMsourceTask::start() UM_LICENSE_FILE: " + (props.get(UMSourceConnector.UM_LICENSE_FILE)));
             if (props.get(UMSourceConnector.UM_LICENSE_STRING) != null) {
+                System.out.println("UMsourceTask::start() Using UM license string");
                 LBM.setLicenseString(props.get(UMSourceConnector.UM_LICENSE_STRING));
             } else {
+                System.out.println("UMsourceTask::start() Using UM license file");
                 LBM.setLicenseFile(props.get(UMSourceConnector.UM_LICENSE_FILE));
             }
             // Init LBM
@@ -95,10 +102,10 @@ public class UMSourceTask extends SourceTask {
             logger.error(errStr, ex);
             throw new ConnectException(errStr, ex);
         }
-
         org.apache.log4j.BasicConfigurator.configure();
         log4jLogger lbmlogger = new log4jLogger(org.apache.log4j.Logger.getLogger(this.getClass()));
         lbm.setLogger(lbmlogger);
+        System.out.println("UmsourceTask::start() setLogger");
 
         try {
             LBM.setConfiguration(um_config_filename);
@@ -119,16 +126,25 @@ public class UMSourceTask extends SourceTask {
         // Create Callback object
         UmRcvReceiver rcv = new UmRcvReceiver(um_topic, kafka_topic, msgQ);
         ctx_attr.setImmediateMessageCallback(rcv);
+        System.out.println("UmsourceTask::start() set callback");
 
         // Create Context object
         LBMContext ctx = null;
         try {
+            ctx_attr.setValue("request_tcp_interface", "192.168.254.0/24");
+            ctx_attr.setValue("default_interface", "192.168.254.0/24");
+            ctx_attr.setValue("request_tcp_port_low", "31000");
+            ctx_attr.setValue("request_tcp_port_high", "31100");
+            ctx_attr.setValue("resolver_multicast_interface", "192.168.254.0/24");
+            ctx_attr.setValue("resolver_multicast_address", "225.11.15.85");
+            ctx_attr.setValue("resolver_multicast_port", "13965");
             ctx = new LBMContext(ctx_attr);
         } catch (LBMException ex) {
             String errStr = ("Error creating context: " + ex.toString());
             logger.error(errStr, ex);
             throw new ConnectException(errStr, ex);
         }
+        System.out.println("UmsourceTask::start() created context");
 
         // - Create Topic object
         LBMTopic topic = null;
@@ -143,6 +159,7 @@ public class UMSourceTask extends SourceTask {
             logger.error(errStr, ex);
             throw new ConnectException(errStr, ex);
         }
+        System.out.println("UmsourceTask::start() created LBMTopic on [" + um_topic + "]");
 
         LBMReceiver lbmrcv = null;
         // - Create Receiver object
@@ -153,6 +170,17 @@ public class UMSourceTask extends SourceTask {
             logger.error(errStr, ex);
             throw new ConnectException(errStr, ex);
         }
+        System.out.println("UmsourceTask::start() created receiver");
+        System.out.println("Sleeping 10 seconds ");
+        for (int i = 0; i < 10; ++i) {
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                System.out.println("YO!");
+            }
+            System.out.println(".");
+        }
+        System.out.println("done!");
     }
 
     @Override
@@ -162,7 +190,9 @@ public class UMSourceTask extends SourceTask {
         LBMMessage msg = null;
 
         records = new ArrayList<>();
+        System.out.println("UmsourceTask::poll() entering while loop");
         while ((msg = msgQ.poll()) != null) {
+            System.out.println("BAM");
             SourceRecord record = new SourceRecord(offsetKey(msg.topicName()), offsetValue(msg.sequenceNumber()),
                     kafka_topic, null, BYTES_SCHEMA, msg.data());
             records.add(record);
@@ -227,6 +257,7 @@ class UmRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
     BlockingQueue<LBMMessage> msgQ;
 
     UmRcvReceiver(String um_topic, String kafka_topic, BlockingQueue<LBMMessage> msg_queue) {
+        System.out.println("UmRcvReceiver() UmRcvReceiver()");
         umTopic = um_topic;
         kafkaTopic = kafka_topic;
         msgQ = msg_queue;
@@ -239,10 +270,12 @@ class UmRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
     public int onReceiveImmediate(Object cbArg, LBMMessage msg)
     {
         imsg_count++;
+        System.out.println("UmRcvReceiver() onReceiveImmediate()");
         return onReceive(cbArg, msg);
     }
 
     Boolean handleMsgData(Object cbArg, LBMMessage msg) {
+        System.out.println("UmRcvReceiver() onReceiveImmediate()");
         if (stotal_msg_count == 0)
             data_start_time = System.currentTimeMillis();
         else
@@ -285,6 +318,7 @@ class UmRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
     public int onReceive(Object cbArg, LBMMessage msg)
     {
         boolean doDispose = true;
+        System.out.println("UmRcvReceiver() onReceive()");
         switch (msg.type())
         {
             case LBM.MSG_DATA:
