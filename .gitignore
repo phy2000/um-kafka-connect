@@ -74,3 +74,7 @@ fabric.properties
 ### PHY - maven and gradle
 build/
 target/
+.classpath
+.project
+.settings/
+*.dylib
