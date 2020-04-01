@@ -37,7 +37,7 @@ public class UMSinkConnector extends SinkConnector {
 
     public static final String FILE_CONFIG = "file";
     private static final ConfigDef CONFIG_DEF = new ConfigDef()
-        .define(FILE_CONFIG, Type.STRING, null, Importance.HIGH, "Destination filename. If not specified, the standard output will be used");
+        .define(FILE_CONFIG, Type.STRING,"file.out", Importance.HIGH, "Destination filename. If not specified, the standard output will be used");
 
     private String filename;
 
