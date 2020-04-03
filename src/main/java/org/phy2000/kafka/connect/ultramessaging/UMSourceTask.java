@@ -20,16 +20,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 
-import java.io.InterruptedIOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.BlockingDeque;
+import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.TimeUnit;
 
 import com.latencybusters.lbm.*;
 import org.apache.kafka.connect.data.Schema;
@@ -62,7 +56,10 @@ public class UMSourceTask extends SourceTask {
     private Long streamOffset;
     private LBM lbm;
 
+    private static int while_loop_count = 0;
+
     BlockingQueue<LBMMessage> msgQ = new LinkedBlockingDeque<>(1000);
+
     LBMObjectRecycler objRec = new LBMObjectRecycler();
 
     @Override
@@ -73,26 +70,26 @@ public class UMSourceTask extends SourceTask {
     @Override
     public void start(Map<String, String> props) {
         batchSize = Integer.parseInt(props.get(UMSourceConnector.TASK_BATCH_SIZE_CONFIG));
-        System.out.println("UMsourceTask::start() batchSize: " + batchSize);
+        System.out.println("UMSourceTask::start() batchSize: " + batchSize);
         // - Get UM Config file
         um_config_filename = props.get(UMSourceConnector.UM_CONFIG_FILE);
-        System.out.println("UMsourceTask::start() um_config_filename: " + um_config_filename);
+        System.out.println("UMSourceTask::start() um_config_filename: " + um_config_filename);
         // - Get Topic Names
         // TODO - handle multiple topics and/or partitioning
         um_topic = props.get(UMSourceConnector.UM_TOPIC);
-        System.out.println("UMsourceTask::start() um_topic: " +  um_topic);
+        System.out.println("UMSourceTask::start() um_topic: " +  um_topic);
         kafka_topic = props.get(UMSourceConnector.KAFKA_TOPIC);
-        System.out.println("UMsourceTask::start() kafka_topic: " +  kafka_topic);
+        System.out.println("UMSourceTask::start() kafka_topic: " +  kafka_topic);
 
         try {
             // - Set UM License file or License string
-            System.out.println("UMsourceTask::start() UM_LICENSE_STRING: " + (props.get(UMSourceConnector.UM_LICENSE_STRING)));
-            System.out.println("UMsourceTask::start() UM_LICENSE_FILE: " + (props.get(UMSourceConnector.UM_LICENSE_FILE)));
+            System.out.println("UMSourceTask::start() UM_LICENSE_STRING: " + (props.get(UMSourceConnector.UM_LICENSE_STRING)));
+            System.out.println("UMSourceTask::start() UM_LICENSE_FILE: " + (props.get(UMSourceConnector.UM_LICENSE_FILE)));
             if (props.get(UMSourceConnector.UM_LICENSE_STRING) != null) {
-                System.out.println("UMsourceTask::start() Using UM license string");
+                System.out.println("UMSourceTask::start() Using UM license string");
                 LBM.setLicenseString(props.get(UMSourceConnector.UM_LICENSE_STRING));
             } else {
-                System.out.println("UMsourceTask::start() Using UM license file");
+                System.out.println("UMSourceTask::start() Using UM license file");
                 LBM.setLicenseFile(props.get(UMSourceConnector.UM_LICENSE_FILE));
             }
             // Init LBM
@@ -105,15 +102,16 @@ public class UMSourceTask extends SourceTask {
         org.apache.log4j.BasicConfigurator.configure();
         log4jLogger lbmlogger = new log4jLogger(org.apache.log4j.Logger.getLogger(this.getClass()));
         lbm.setLogger(lbmlogger);
-        System.out.println("UmsourceTask::start() setLogger");
+        System.out.println("UMSourceTask::start() setLogger");
 
-        try {
+        /*try {
             LBM.setConfiguration(um_config_filename);
         } catch (LBMException ex) {
             String errStr = String.format("Error LBM.setConfiguration(%s)", um_config_filename);
             logger.error(errStr, ex);
             throw new ConnectException(errStr, ex);
-        }
+        } */
+
         LBMContextAttributes ctx_attr = null;
         try {
             ctx_attr = new LBMContextAttributes();
@@ -126,25 +124,26 @@ public class UMSourceTask extends SourceTask {
         // Create Callback object
         UmRcvReceiver rcv = new UmRcvReceiver(um_topic, kafka_topic, msgQ);
         ctx_attr.setImmediateMessageCallback(rcv);
-        System.out.println("UmsourceTask::start() set callback");
+        System.out.println("UMSourceTask::start() set callback");
 
         // Create Context object
         LBMContext ctx = null;
         try {
-            ctx_attr.setValue("request_tcp_interface", "192.168.254.0/24");
+            /* ctx_attr.setValue("request_tcp_interface", "192.168.254.0/24");
             ctx_attr.setValue("default_interface", "192.168.254.0/24");
             ctx_attr.setValue("request_tcp_port_low", "31000");
             ctx_attr.setValue("request_tcp_port_high", "31100");
             ctx_attr.setValue("resolver_multicast_interface", "192.168.254.0/24");
             ctx_attr.setValue("resolver_multicast_address", "225.11.15.85");
             ctx_attr.setValue("resolver_multicast_port", "13965");
+             */
             ctx = new LBMContext(ctx_attr);
         } catch (LBMException ex) {
             String errStr = ("Error creating context: " + ex.toString());
             logger.error(errStr, ex);
             throw new ConnectException(errStr, ex);
         }
-        System.out.println("UmsourceTask::start() created context");
+        System.out.println("UMSourceTask::start() created context");
 
         // - Create Topic object
         LBMTopic topic = null;
@@ -159,7 +158,7 @@ public class UMSourceTask extends SourceTask {
             logger.error(errStr, ex);
             throw new ConnectException(errStr, ex);
         }
-        System.out.println("UmsourceTask::start() created LBMTopic on [" + um_topic + "]");
+        System.out.println("UMSourceTask::start() created LBMTopic on [" + um_topic + "]");
 
         LBMReceiver lbmrcv = null;
         // - Create Receiver object
@@ -170,13 +169,13 @@ public class UMSourceTask extends SourceTask {
             logger.error(errStr, ex);
             throw new ConnectException(errStr, ex);
         }
-        System.out.println("UmsourceTask::start() created receiver");
-        System.out.println("Sleeping 10 seconds ");
-        for (int i = 0; i < 10; ++i) {
+        System.out.println("UMSourceTask::start() created receiver");
+        System.out.println("Sleeping 2 seconds ");
+        for (int i = 0; i < 2; ++i) {
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
-                System.out.println("YO!");
+                System.out.println("Thread.sleep failed!");
             }
             System.out.println(".");
         }
@@ -187,12 +186,17 @@ public class UMSourceTask extends SourceTask {
     public List<SourceRecord> poll() throws InterruptedException {
 
         ArrayList<SourceRecord> records = null;
-        LBMMessage msg = null;
-
         records = new ArrayList<>();
-        System.out.println("UmsourceTask::poll() entering while loop");
+
+        if (while_loop_count++ >= 10000000) {
+            logger.info("poll() - entered while loop 10,000,000 times...");
+            while_loop_count = 0;
+        }
+
+        LBMMessage msg = null;
         while ((msg = msgQ.poll()) != null) {
-            System.out.println("BAM");
+            logger.info("poll() - received record topic[" + msg.topicName() + "] seqnum[" + msg.sequenceNumber() + "] for kafka topic[" + kafka_topic + "] msg.dataLength[" + msg.dataLength() + "] msg.dataString()[" + msg.dataString() + "]");
+            logger.info("         msg.data().length[" + msg.data().length + "] Arrays.toString(msg.data()[" + Arrays.toString(msg.data()) + "]");
             SourceRecord record = new SourceRecord(offsetKey(msg.topicName()), offsetValue(msg.sequenceNumber()),
                     kafka_topic, null, BYTES_SCHEMA, msg.data());
             records.add(record);
@@ -202,7 +206,6 @@ public class UMSourceTask extends SourceTask {
         }
         return records;
     }
-
 
     @Override
     public void stop() {
@@ -257,7 +260,7 @@ class UmRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
     BlockingQueue<LBMMessage> msgQ;
 
     UmRcvReceiver(String um_topic, String kafka_topic, BlockingQueue<LBMMessage> msg_queue) {
-        System.out.println("UmRcvReceiver() UmRcvReceiver()");
+        System.out.println("UmRcvReceiver::UmRcvReceiver()");
         umTopic = um_topic;
         kafkaTopic = kafka_topic;
         msgQ = msg_queue;
@@ -270,12 +273,11 @@ class UmRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
     public int onReceiveImmediate(Object cbArg, LBMMessage msg)
     {
         imsg_count++;
-        System.out.println("UmRcvReceiver() onReceiveImmediate()");
+        logger.info("onReceiveImmediate() Calling onReceive()...");
         return onReceive(cbArg, msg);
     }
 
     Boolean handleMsgData(Object cbArg, LBMMessage msg) {
-        System.out.println("UmRcvReceiver() onReceiveImmediate()");
         if (stotal_msg_count == 0)
             data_start_time = System.currentTimeMillis();
         else
@@ -293,24 +295,29 @@ class UmRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
         byte_count += msg.dataLength();
         total_byte_count += msg.dataLength();
 
+        byte[] m = msg.data();
+        //ByteBuffer ms = msg.dataBuffer();
+
         if ((msg.flags() & LBM.MSG_FLAG_RETRANSMIT) != 0) {
+            logger.warn("handleMsgData() Retransmit request");
             rx_msgs++;
         }
         if ((msg.flags() & LBM.MSG_FLAG_OTR) != 0) {
+            logger.warn("handleMsgData() Off transport recovery");
             otr_msgs++;
         }
         // Will be picked up by "poll" thread
         while (true) {
             if (!msgQ.offer(msg)) {
-                logger.warn(String.format("Queue is full for seqnum %d - waiting 1 second for retry",
-                        msg.sequenceNumber()));
+                logger.warn("handleMsgData() Queue is full for seqnum[" + msg.sequenceNumber() + "] - waiting 1 second for retry");
                 try {
                     Thread.sleep(1000);
                 } catch (InterruptedException intEx) {
-                    logger.warn(String.format("Retry interrupted for seqnum %d", msg.sequenceNumber()), intEx);
+                    logger.warn("handleMsgData() Retry interrupted for seqnum[" + msg.sequenceNumber() + "] interrupt exception:" + intEx);
                     return false;
                 }
             } else {
+                logger.info("handleMsgData() Received seqnum [" + msg.sequenceNumber() + "] msg.dataString()[" + msg.dataString() + "]");
                 return true;
             }
         }
@@ -318,32 +325,30 @@ class UmRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
     public int onReceive(Object cbArg, LBMMessage msg)
     {
         boolean doDispose = true;
-        System.out.println("UmRcvReceiver() onReceive()");
         switch (msg.type())
         {
             case LBM.MSG_DATA:
                 if (handleMsgData(cbArg, msg)) {
                 	doDispose = false;
                 } else {
-                	//TODO - what should we do about failed queuing?
+                    logger.warn("onReceive() - TODO: what should we do about failed queuing?");
                 }
-
                 break;
             case LBM.MSG_BOS:
-                logger.info("[" + msg.topicName() + "][" + msg.source() + "], Beginning of Transport Session");
+                logger.info("onReceive() [" + msg.topicName() + "][" + msg.source() + "], Beginning of Transport Session");
                 break;
             case LBM.MSG_EOS:
-                logger.info("[" + msg.topicName() + "][" + msg.source() + "], End of Transport Session");
+                logger.info("onReceive() [" + msg.topicName() + "][" + msg.source() + "], End of Transport Session");
                 subtotal_msg_count = 0;
                 break;
             case LBM.MSG_UNRECOVERABLE_LOSS:
                 unrec_count++;
                 total_unrec_count++;
-                logger.warn("[" + msg.topicName() + "][" + msg.source() + "], Unrecoverable Loss!");
+                logger.warn("onReceive() [" + msg.topicName() + "][" + msg.source() + "], Unrecoverable Loss!");
                 break;
             case LBM.MSG_UNRECOVERABLE_LOSS_BURST:
                 burst_loss++;
-                logger.info("[" + msg.topicName() + "][" + msg.source() + "], Unrecoverable Burst Loss!");
+                logger.info("onReceive() [" + msg.topicName() + "][" + msg.source() + "], Unrecoverable Burst Loss!");
                 break;
             case LBM.MSG_REQUEST:
             	if (handleMsgData(cbArg, msg)) {
@@ -362,7 +367,7 @@ class UmRcvReceiver implements LBMReceiverCallback, LBMImmediateMessageCallback
                         ((msg.flags() & LBM.MSG_FLAG_HF_32) != 0 ? "-HF32" : "")));
                 break;
             default:
-                logger.warn("Unknown lbm_msg_t type " + msg.type() + " [" + msg.topicName() + "][" + msg.source() + "]");
+                logger.warn("onReceive() - Unknown lbm_msg_t type " + msg.type() + " [" + msg.topicName() + "][" + msg.source() + "]");
                 break;
         }
         if (doDispose) {
