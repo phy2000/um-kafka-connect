@@ -58,7 +58,6 @@ public class UMSourceTask extends SourceTask {
 
     private static int while_loop_count = 0;
 
-    //BlockingQueue<LBMMessage> msgQ = new LinkedBlockingDeque<>(1000);
     BlockingQueue<LBMMessage> msgQ = new LinkedBlockingDeque<>(1000);
 
     LBMObjectRecycler objRec = new LBMObjectRecycler();

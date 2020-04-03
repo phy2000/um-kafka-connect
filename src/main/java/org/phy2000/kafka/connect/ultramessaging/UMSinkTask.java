@@ -19,6 +19,7 @@ package org.phy2000.kafka.connect.ultramessaging;
 import com.latencybusters.lbm.*;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -161,12 +162,12 @@ public class UMSinkTask extends SinkTask {
     @Override
     public void put(Collection<SinkRecord> sinkRecords) {
         for (SinkRecord record : sinkRecords) {
-            ByteBuffer byteBuffer = null;
+
             logger.info("Writing to[{}] value[{}] valueSchema[{}] Timestamp[{}] Topic[{}]", logFilename(), record.value(), record.valueSchema(), record.timestamp(), record.topic());
-            outputStream.println(record.value());
-            if (record.value() instanceof ByteBuffer) {
-                byteBuffer = (ByteBuffer)record.value();
-                logger.info("record.value()[{}]", StandardCharsets.UTF_8.decode(byteBuffer).toString());
+            if (record.value() instanceof byte[]) {
+                byte[] byteArray = (byte[]) record.value();
+                ByteBuffer byteBuffer = ByteBuffer.wrap(byteArray);
+                outputStream.println(StandardCharsets.UTF_8.decode(byteBuffer).toString());
                 byteBuffer.position(0);
                 confirmByteBuffer(byteBuffer.limit());
                 message.position(0);
@@ -178,10 +179,9 @@ public class UMSinkTask extends SinkTask {
                 }
                 message.rewind();
                 logger.info("sent message [{}]", StandardCharsets.UTF_8.decode(message).toString());
-            } else {
+            }  else {
                 logger.warn("record.value() is an instance of [{}]", record.value().getClass().toString());
             }
-            outputStream.println(record.value());
         }
     }
 
