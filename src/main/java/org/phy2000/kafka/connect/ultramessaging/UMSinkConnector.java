@@ -34,12 +34,31 @@ import java.util.Map;
  * sink modes via its 'mode' setting.
  */
 public class UMSinkConnector extends SinkConnector {
-
+    public static final String UM_CONFIG_FILE = "um.config.file";
+    public static final String UM_LICENSE_FILE = "um.license.file";
+    public static final String UM_TOPIC_PREFIX = "um.topic.prefix";
     public static final String FILE_CONFIG = "file";
-    private static final ConfigDef CONFIG_DEF = new ConfigDef()
-        .define(FILE_CONFIG, Type.STRING,"file.out", Importance.HIGH, "Destination filename. If not specified, the standard output will be used");
 
-    private String filename;
+    public static final String DEFAULT_UM_CONFIG_FILE = "/home/centos/um.config.file";
+    public static final String DEFAULT_UM_LICENSE_FILE = "C:/Users/mbradac/Desktop/um-kafka-connect-master/um.license.file";
+    public static final String DEFAULT_UM_TOPIC_PREFIX = "";
+    public static final String DEFAULT_FILE_DOT_OUT = "file.out";
+
+    private static final ConfigDef CONFIG_DEF = new ConfigDef()
+        .define(UM_CONFIG_FILE, Type.STRING, DEFAULT_UM_CONFIG_FILE, Importance.HIGH,"Full path to the UM configuration file")
+        .define(UM_LICENSE_FILE, Type.STRING, DEFAULT_UM_LICENSE_FILE, Importance.HIGH,"Full path to the UM License file")
+        .define(UM_TOPIC_PREFIX, Type.STRING, DEFAULT_UM_TOPIC_PREFIX, Importance.HIGH,"UM source Topic prefix")
+        .define(FILE_CONFIG, Type.STRING, DEFAULT_FILE_DOT_OUT, Importance.HIGH, "Destination filename. If not specified, the standard output will be used");
+
+    //private String filename;
+    private UMSinkConnector.um_kafka_config um_config = new UMSinkConnector.um_kafka_config();
+
+    class um_kafka_config {
+        String um_config_file;
+        String um_license_file;
+        String um_topic_prefix;
+        String filename;
+    }
 
     @Override
     public String version() {
@@ -49,9 +68,11 @@ public class UMSinkConnector extends SinkConnector {
     @Override
     public void start(Map<String, String> props) {
         AbstractConfig parsedConfig = new AbstractConfig(CONFIG_DEF, props);
-        filename = parsedConfig.getString(FILE_CONFIG);
+        um_config.um_config_file = parsedConfig.getString(UM_CONFIG_FILE);
+        um_config.um_license_file = parsedConfig.getString(UM_LICENSE_FILE);
+        um_config.um_topic_prefix = parsedConfig.getString(UM_TOPIC_PREFIX);
+        um_config.filename = parsedConfig.getString(FILE_CONFIG);
     }
-
 
     @Override
     public Class<? extends Task> taskClass() {
@@ -62,14 +83,17 @@ public class UMSinkConnector extends SinkConnector {
     // each task is a separate thread assigned to one or more partitions
     @Override
     public List<Map<String, String>> taskConfigs(int maxTasks) {
-        ArrayList<Map<String, String>> configs = new ArrayList<>();
+        ArrayList<Map<String, String>> taskConfigs = new ArrayList<>();
         for (int i = 0; i < maxTasks; i++) {
             Map<String, String> config = new HashMap<>();
-            if (filename != null)
-                config.put(FILE_CONFIG, filename);
-            configs.add(config);
+            config.put(UM_CONFIG_FILE, um_config.um_config_file);
+            config.put(UM_LICENSE_FILE, um_config.um_license_file);
+            config.put(UM_TOPIC_PREFIX, um_config.um_topic_prefix);
+            if (um_config.filename != null)
+                config.put(FILE_CONFIG, um_config.filename);
+            taskConfigs.add(config);
         }
-        return configs;
+        return taskConfigs;
     }
 
     @Override
