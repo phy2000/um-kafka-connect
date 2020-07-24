@@ -28,41 +28,48 @@ import org.apache.kafka.connect.source.SourceConnector;
 import java.util.*;
 
 /**
- * Very simple connector that works with the console. This connector supports both source and
- * sink modes via its 'mode' setting.
+ * UMSourceConnector
  */
 public class UMSourceConnector extends SourceConnector {
-    public static final String UM_CONFIG_FILE = "um.um_config.file";
+    public static final String UM_VERBOSE = "um.verbose";
+    public static final String UM_PERSIST = "um.persist";
+    public static final String UM_WILDCARD = "um.wildcard";
+    public static final String UM_CONFIG_FILE = "um.config.file";
     public static final String UM_LICENSE_FILE = "um.license.file";
-    public static final String UM_LICENSE_STRING = "um.license.string";
     public static final String UM_TOPIC = "um.topic";
     public static final String KAFKA_TOPIC = "kafka.topic";
-    public static final String TASK_BATCH_SIZE_CONFIG = "batch.size";
+    public static final String BATCH_SIZE = "batch.size";
 
-    public static final String DEFAULT_UM_CONFIG_FILE = "um.license.file";
-    public static final String DEFAULT_UM_LICENSE_FILE = "um.license.file";
-    public static final String DEFAULT_UM_LICENSE_STRING = "Product=LBM,UME,UMQ,UMDRO:Organization=UM (RnD):Expiration-Date=never:License-Key=FCB4 C6FE 6763 5EC9";
-    public static final String DEFAULT_UM_TOPIC = "UM topic 1";
-    public static final String DEFAULT_KAFKA_TOPIC = "Kafka topic 1";
-    public static final int DEFAULT_TASK_BATCH_SIZE = 2020;
+    public static final String DEFAULT_UM_VERBOSE = "0";
+    public static final String DEFAULT_UM_PERSIST = "0";
+    public static final String DEFAULT_UM_WILDCARD = "0";
+    public static final String DEFAULT_UM_CONFIG_FILE = ".um.config.file";
+    public static final String DEFAULT_UM_LICENSE_FILE = "./um.license.file";
+    public static final String DEFAULT_UM_TOPIC = "";
+    public static final String DEFAULT_KAFKA_TOPIC = "";
+    public static final int DEFAULT_BATCH_SIZE = 100;
 
     private static final ConfigDef CONFIG_DEF = new ConfigDef()
+            .define(UM_VERBOSE, Type.INT, DEFAULT_UM_VERBOSE, Importance.HIGH,"Log file verbosity")
+            .define(UM_PERSIST, Type.INT, DEFAULT_UM_PERSIST, Importance.HIGH,"Persistent receiver")
+            .define(UM_WILDCARD, Type.INT, DEFAULT_UM_WILDCARD, Importance.HIGH,"Wildcard receiver")
             .define(UM_CONFIG_FILE, Type.STRING, DEFAULT_UM_CONFIG_FILE, Importance.HIGH,"Full path to the UM configuration file")
             .define(UM_LICENSE_FILE, Type.STRING, DEFAULT_UM_LICENSE_FILE, Importance.HIGH,"Full path to the UM License file")
-            .define(UM_LICENSE_STRING, Type.STRING, DEFAULT_UM_LICENSE_STRING, Importance.HIGH,"License string - if set, used instead of license file")
             .define(UM_TOPIC, Type.STRING, DEFAULT_UM_TOPIC, Importance.HIGH,"UM Topic name to subscribe to")
             .define(KAFKA_TOPIC, Type.STRING, DEFAULT_KAFKA_TOPIC, Importance.HIGH,"The kafka topic to publish data to")
-            .define(TASK_BATCH_SIZE_CONFIG, Type.INT, DEFAULT_TASK_BATCH_SIZE, Importance.LOW,"The maximum number of records the Source task can read from UM topic");
+            .define(BATCH_SIZE, Type.INT, DEFAULT_BATCH_SIZE, Importance.LOW,"The maximum number of records the Source task can read from UM topic queue");
 
-    private um_kafka_config um_config = new um_kafka_config();
+    private final um_kafka_config um_config = new um_kafka_config();
 
-    class um_kafka_config {
+    static class um_kafka_config {
+        int um_verbose;
+        int um_persist;
+        int um_wildcard;
         String um_config_file;
         String um_license_file;
-        String um_license_string;
         String um_topic;
         String kafka_topic;
-        int task_batch_size;
+        int batch_size;
     }
 
     @Override
@@ -75,22 +82,19 @@ public class UMSourceConnector extends SourceConnector {
         AbstractConfig parsedConfig = new AbstractConfig(CONFIG_DEF, props);
         String errMsg = "";
 
-        // TODO - need logic to map multiple topics->topics
+        um_config.um_verbose = parsedConfig.getInt(UM_VERBOSE);
+        um_config.um_persist = parsedConfig.getInt(UM_PERSIST);
+        um_config.um_wildcard = parsedConfig.getInt(UM_WILDCARD);
         um_config.um_config_file = parsedConfig.getString(UM_CONFIG_FILE);
         um_config.um_license_file = parsedConfig.getString(UM_LICENSE_FILE);
-        um_config.um_license_string = parsedConfig.getString(UM_LICENSE_STRING);
         um_config.um_topic = parsedConfig.getString(UM_TOPIC);
         um_config.kafka_topic = parsedConfig.getString(KAFKA_TOPIC);
-        um_config.task_batch_size = parsedConfig.getInt(TASK_BATCH_SIZE_CONFIG);
+        um_config.batch_size = parsedConfig.getInt(BATCH_SIZE);
 
         if (um_config.um_config_file == null) {
             errMsg += String.format("%s must be set\n", UM_CONFIG_FILE);
         }
-        if (um_config.um_license_file == null && um_config.um_license_string == null) {
-            errMsg += String.format("one of %s or %s must be set\n", UM_LICENSE_FILE, UM_LICENSE_STRING);
-        }
         if (errMsg.length() >= 1) {
-            System.out.println("BAM!");
             throw new ConfigException(errMsg);
         }
     }
@@ -104,14 +108,14 @@ public class UMSourceConnector extends SourceConnector {
     public List<Map<String, String>> taskConfigs(int maxTasks) {
         ArrayList<Map<String, String>> taskConfigs = new ArrayList<>();
         Map<String, String> config = new HashMap<>();
-
+        config.put(UM_VERBOSE, String.valueOf(um_config.um_verbose));
+        config.put(UM_PERSIST, String.valueOf(um_config.um_persist));
+        config.put(UM_WILDCARD, String.valueOf(um_config.um_wildcard));
         config.put(UM_CONFIG_FILE, um_config.um_config_file);
-        System.out.println("dude... um_config_file [" + config.get(UM_CONFIG_FILE) + "]");
         config.put(UM_LICENSE_FILE, um_config.um_license_file);
-        config.put(UM_LICENSE_STRING, um_config.um_license_string);
         config.put(UM_TOPIC, um_config.um_topic);
         config.put(KAFKA_TOPIC, um_config.kafka_topic);
-        config.put(TASK_BATCH_SIZE_CONFIG, String.valueOf(um_config.task_batch_size));
+        config.put(BATCH_SIZE, String.valueOf(um_config.batch_size));
         taskConfigs.add(config);
 
         return taskConfigs;
